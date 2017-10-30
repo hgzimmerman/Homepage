@@ -14,7 +14,7 @@ limits = { forms = 32768 }
 
 [production]
 address = "0.0.0.0"
-port = 8000
+port = 8001
 workers = 2 
-log = "critical"
+log = "normal"
 limits = { forms = 32768 }
