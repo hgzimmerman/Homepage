@@ -7,6 +7,7 @@ extern crate rocket;
 extern crate log;
 extern crate simplelog;
 extern crate test;
+extern crate rand;
 
 
 use rocket::response::NamedFile;
@@ -95,6 +96,17 @@ mod tests {
         let client = Client::new(init_file_rocket()).expect("valid rocket instance");
         b.iter(|| {
             let mut response = client.get("resources/linuxpenguin.jpg").dispatch();
+        });
+    }
+
+    // This bench was to confirm that all performance was lost in cloning the datastructure storing the file.
+    #[bench]
+    fn clone2meg(b: &mut Bencher) {
+        use rand::{StdRng, Rng};
+        let mut megs2 = [0u8; 2000000];
+        StdRng::new().unwrap().fill_bytes(&mut megs2);
+        b.iter( || {
+            megs2.clone()
         });
     }
 }
