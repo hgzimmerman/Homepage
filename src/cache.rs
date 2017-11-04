@@ -17,7 +17,7 @@ use std::usize;
 #[derive(Debug, Clone)]
 pub struct CachedFile {
     path: PathBuf,
-    bytes: Cursor<Vec<u8>>,
+    bytes: Vec<u8>,
     size: usize
 }
 
@@ -30,7 +30,7 @@ impl CachedFile {
 
         Ok(CachedFile {
             path: path.as_ref().to_path_buf(),
-            bytes: Cursor::new(buffer),
+            bytes: buffer,
             size
         })
     }
@@ -51,7 +51,21 @@ impl Responder<'static> for CachedFile {
             }
         }
 
-        response.set_streamed_body(self.bytes);
+        response.set_streamed_body(Cursor::new(self.bytes));
+        Ok(response)
+    }
+}
+
+impl <'a>Responder<'a> for &'a CachedFile {
+    fn respond_to(self, _: &Request) -> result::Result<Response<'a>, Status> {
+        let mut response = Response::new();
+        if let Some(ext) = self.path.extension() {
+            if let Some(ct) = ContentType::from_extension(&ext.to_string_lossy()) {
+                response.set_header(ct);
+            }
+        }
+
+        response.set_streamed_body(self.bytes.as_slice());
         Ok(response)
     }
 }
@@ -67,7 +81,7 @@ impl From<NamedFile> for CachedFile {
 
         CachedFile {
             path,
-            bytes: Cursor::new(buffer),
+            bytes: buffer,
             size
         }
     }
