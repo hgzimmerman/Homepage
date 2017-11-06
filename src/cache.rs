@@ -13,12 +13,20 @@ use rocket::response::NamedFile;
 use std::result;
 use std::io::Cursor;
 use std::usize;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct CachedFile {
     path: PathBuf,
     bytes: Vec<u8>,
     size: usize
+}
+
+impl fmt::Display for CachedFile {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{Path: {:?}, Size: {}}}", self.path, self.size)
+
+    }
 }
 
 impl CachedFile {
@@ -90,9 +98,25 @@ impl From<NamedFile> for CachedFile {
 
 
 pub struct Cache {
-    size_limit: usize,
+    size_limit: usize, // Currently this is being used as the number of elements in the cache, but should be used as the number of bytes in the hashmap.
     file_map: HashMap<PathBuf, CachedFile>,
     access_count_map: HashMap<PathBuf, usize>
+}
+
+impl fmt::Display for Cache {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_map().entries(
+            self.file_map.iter().zip(self.access_count_map.iter()).map(|x| {
+                let size = (x.0).1.size;
+                let count = (x.1).1;
+                let path = &(x.0).1.path;
+
+                ((path, size), (x.1).1)
+        })
+//                .zip(self.access_count_map.iter())
+        ).finish()
+//        write!(f, "({}, {})", self., self.y)
+    }
 }
 
 impl Cache {
@@ -105,17 +129,44 @@ impl Cache {
         }
     }
 
-    pub fn store(&mut self, path: PathBuf, file: CachedFile) {
+    pub fn store(&mut self, path: PathBuf, file: CachedFile) -> result::Result<(), String> {
         let possible_store_count: usize = self.access_count_map.get(&path).unwrap_or(&0usize) + 0;
-        let lowest_tuple: (usize, PathBuf) = self.lowest_access_count_in_file_map();
+
+        match self.lowest_access_count_in_file_map() {
+            Some(lowest) => {
+                let (lowest_count, lowest_key) = lowest;
+                // If there is room in the hashmap, just add the file
+                // TODO consider moving this outside of the match statement.
+                if self.size() < self.size_limit {
+                    self.file_map.insert(path.clone(), file);
+                    info!("Inserting a file: {:?} into cache.", path);
+                    return Ok(()) // Inserted successfully.
+                }
+                // It should early return if a file can be added without having to remove a file first.
+                // Currently this removes the file that has been accessed the least.
+                if possible_store_count > lowest_count {
+                    self.file_map.remove(&lowest_key);
+                    self.file_map.insert(path.clone(), file);
+                    info!("Removing file: {:?} to make room for file: {:?}.", lowest_key, path);
+                    return Ok(())
+                } else {
+                    info!("File: {:?} has less demand than files already in the cache.", path);
+                    return Err(String::from("File demand for file is lower than files already in the cache"));
+                }
+            }
+            None => {
+                info!("Inserting first file: {:?} into cache.", path);
+                self.file_map.insert(path, file);
+                Ok(())
+            }
+        }
 
 //        if possible_store_count > lowest_tuple.0 {
 //            if self.size() >= self.size_limit { // we have to remove one to make room.
 //                self.file_map.remove(&lowest_tuple.1);
 //                self.file_map.insert(path, file);
 //            } else { // we can just add the file without removing another.
-                info!("Inserting file: {:?} into cache.", path);
-                self.file_map.insert(path, file);
+
 //            }
 //        }
     }
@@ -127,6 +178,7 @@ impl Cache {
     }
 
     pub fn get_and_store(&mut self, pathbuf: PathBuf) -> Option<CachedFile> {
+//        info!("Cache: {}", self);
 
         let file: Option<CachedFile>;
         // First try to get the file in the cache that corresponds to the desired path.
@@ -151,7 +203,11 @@ impl Cache {
         }
     }
 
-    fn lowest_access_count_in_file_map(&self) -> (usize,PathBuf) {
+    fn lowest_access_count_in_file_map(&self) -> Option<(usize,PathBuf)> {
+        if self.file_map.keys().len() == 0 {
+            return None
+        }
+
         let mut lowest_access_count: usize = usize::MAX;
         let mut lowest_access_key: PathBuf = PathBuf::new();
 
@@ -162,15 +218,22 @@ impl Cache {
                 lowest_access_key = file_key.clone();
             }
         }
-        (lowest_access_count, lowest_access_key)
+        Some((lowest_access_count, lowest_access_key))
     }
 
-    fn size(&self) -> u32 {
-        let mut size: u32 = 0;
+    fn size(&self) -> usize {
+        let mut size: usize = 0;
         for _ in self.file_map.keys() {
             size += 1;
         }
         size
+    }
+
+    fn size_bytes(&self) -> usize {
+//        let mut size: usize = 0;
+        self.file_map.iter().fold(0usize, |size, x| {
+           size +  x.1.size
+        })
     }
 
 }
