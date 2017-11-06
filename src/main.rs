@@ -77,6 +77,7 @@ mod tests {
         let mut response = client.get("resources/linuxpenguin.jpg").dispatch(); // make sure the file is in the cache
         b.iter(|| {
             let mut response = client.get("resources/linuxpenguin.jpg").dispatch();
+            let body: Vec<u8> = response.body().unwrap().into_bytes().unwrap();
         });
     }
 
@@ -96,7 +97,9 @@ mod tests {
         let client = Client::new(init_file_rocket()).expect("valid rocket instance");
         b.iter(|| {
             let mut response = client.get("resources/linuxpenguin.jpg").dispatch();
+            let body: Vec<u8> = response.body().unwrap().into_bytes().unwrap();
         });
+
     }
 
     // This bench was to confirm that all performance was lost in cloning the datastructure storing the file.
