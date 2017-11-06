@@ -18,3 +18,10 @@ port = 8000
 workers = 2 
 log = "critical"
 limits = { forms = 32768 }
+
+[test]
+address = "localhost"
+port = 8001
+workers = 2
+log = "critical"
+

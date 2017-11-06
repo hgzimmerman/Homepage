@@ -14,6 +14,8 @@ use std::result;
 use std::io::Cursor;
 use std::usize;
 
+use concurrent_hashmap::{ConcHashMap, Accessor};
+
 #[derive(Debug, Clone)]
 pub struct CachedFile {
     path: PathBuf,
@@ -91,23 +93,26 @@ impl From<NamedFile> for CachedFile {
 
 pub struct Cache {
     size_limit: usize,
-    file_map: HashMap<PathBuf, CachedFile>,
-    access_count_map: HashMap<PathBuf, usize>
+    file_map: ConcHashMap<PathBuf, CachedFile>,
+    access_count_map: ConcHashMap<PathBuf, usize>
 }
+
+unsafe impl Send for Cache {}
+unsafe impl Sync for Cache {}
 
 impl Cache {
 
     pub fn new(size_limit: usize) -> Cache {
         Cache {
             size_limit,
-            file_map: HashMap::new(),
-            access_count_map: HashMap::new()
+            file_map: ConcHashMap::<PathBuf, CachedFile>::new(),
+            access_count_map: ConcHashMap::<PathBuf, usize>::new()
         }
     }
 
     pub fn store(&mut self, path: PathBuf, file: CachedFile) {
-        let possible_store_count: usize = self.access_count_map.get(&path).unwrap_or(&0usize) + 0;
-        let lowest_tuple: (usize, PathBuf) = self.lowest_access_count_in_file_map();
+//        let possible_store_count: usize = self.access_count_map.find(&path).unwrap_or(&0usize) + 0;
+//        let lowest_tuple: (usize, PathBuf) = self.lowest_access_count_in_file_map();
 
 //        if possible_store_count > lowest_tuple.0 {
 //            if self.size() >= self.size_limit { // we have to remove one to make room.
@@ -120,19 +125,18 @@ impl Cache {
 //        }
     }
 
-    pub fn get(&mut self, path: &PathBuf) -> Option<&CachedFile> {
-        let count: &mut usize = self.access_count_map.entry(path.to_path_buf()).or_insert(0usize);
-        *count += 1;
-        self.file_map.get(path)
+    pub fn get(&mut self, path: &PathBuf) -> Option<Accessor<PathBuf,CachedFile>> {
+//        let count: &mut usize = self.access_count_map.entry(path.to_path_buf()).or_insert(0usize);
+        self.access_count_map.upsert(path.to_path_buf(), 1, &|count| *count += 1);
+        self.file_map.find(path)
     }
 
-    pub fn get_and_store(&mut self, pathbuf: PathBuf) -> Option<CachedFile> {
+    pub fn get_and_store(&mut self, pathbuf: PathBuf) -> Option<Accessor<PathBuf,CachedFile>> {
 
-        let file: Option<CachedFile>;
         // First try to get the file in the cache that corresponds to the desired path.
         if let Some(cache_file) = self.get(&pathbuf) {
             info!("Cache hit for file: {:?}", pathbuf);
-            return Some( cache_file.clone())
+            return Some( cache_file )
         };
 
         info!("Cache missed for file: {:?}", pathbuf);
@@ -143,8 +147,9 @@ impl Cache {
             // If the file was read, convert it to a cached file and attempt to store it in the cache
             let cached_file: CachedFile = CachedFile::from(file);
             info!("Trying to add file {:?} to cache", pathbuf);
-            self.store(pathbuf, cached_file.clone()); // possibly stores the cached file in the store.
-            Some(cached_file)
+            self.store(pathbuf, cached_file.clone() ); // possibly stores the cached file in the store.
+//            Some(cached_file)
+            None // TODO figure out how to return a file that didn't end up in the map
         } else {
             // Indicate that the file was not found in either the filesystem or cache.
             None
@@ -155,22 +160,25 @@ impl Cache {
         let mut lowest_access_count: usize = usize::MAX;
         let mut lowest_access_key: PathBuf = PathBuf::new();
 
-        for file_key in self.file_map.keys() {
-            let access_count: &usize = self.access_count_map.get(file_key).unwrap(); // It is guaranteed for the access count entry to exist if the file_map entry exists.
-            if access_count < &lowest_access_count {
-                lowest_access_count = access_count + 0;
+        let keys: Vec<PathBuf> = self.file_map.iter().map(|x: (&PathBuf, &CachedFile)| x.0.clone() ).collect();
+
+        for file_key in keys {
+            let mut access_count = self.access_count_map.find(&file_key).unwrap(); // It is guaranteed for the access count entry to exist if the file_map entry exists.
+            let count = access_count.get();
+            if count < &lowest_access_count {
+                lowest_access_count = count.clone() + 0;
                 lowest_access_key = file_key.clone();
             }
         }
         (lowest_access_count, lowest_access_key)
     }
 
-    fn size(&self) -> u32 {
-        let mut size: u32 = 0;
-        for _ in self.file_map.keys() {
-            size += 1;
-        }
-        size
-    }
+//    fn size(&self) -> u32 {
+//        let mut size: u32 = 0;
+//        for _ in self.file_map.keys() {
+//            size += 1;
+//        }
+//        size
+//    }
 
 }

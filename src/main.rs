@@ -9,6 +9,7 @@ extern crate simplelog;
 extern crate test;
 extern crate rand;
 
+extern crate concurrent_hashmap;
 
 use rocket::response::NamedFile;
 use rocket::Rocket;
@@ -56,9 +57,12 @@ fn init_rocket() -> Rocket {
 }
 
 #[get("/<path..>", rank=4)]
-fn homepage_files(path: PathBuf, cache: State<Mutex<Cache>>) -> Option<CachedFile> {
+fn homepage_files(path: PathBuf, cache: State<Mutex<Cache>> ) -> Option<&CachedFile> {
     let pathbuf: PathBuf = Path::new("www/").join(path.clone()).to_owned();
-    cache.lock().unwrap().get_and_store(pathbuf)
+    match cache.lock().unwrap().get_and_store(pathbuf) {
+        Some(cached_file) => Some(cached_file.get()),
+        None => None
+    }
 }
 
 
