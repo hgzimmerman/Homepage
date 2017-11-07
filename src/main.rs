@@ -62,17 +62,16 @@ mod tests {
     extern crate test;
     use super::*;
     use rocket::local::Client;
-    use rocket::http::Status;
     use test::Bencher;
     use rocket::response::NamedFile;
 
     #[bench]
     fn cache_access(b: &mut Bencher) {
         let client = Client::new(init_rocket()).expect("valid rocket instance");
-        let mut response = client.get("resources/linuxpenguin.jpg").dispatch(); // make sure the file is in the cache
+        let _response = client.get("resources/linuxpenguin.jpg").dispatch(); // make sure the file is in the cache
         b.iter(|| {
             let mut response = client.get("resources/linuxpenguin.jpg").dispatch();
-            let body: Vec<u8> = response.body().unwrap().into_bytes().unwrap();
+            let _body: Vec<u8> = response.body().unwrap().into_bytes().unwrap();
         });
     }
 
@@ -92,7 +91,7 @@ mod tests {
         let client = Client::new(init_file_rocket()).expect("valid rocket instance");
         b.iter(|| {
             let mut response = client.get("resources/linuxpenguin.jpg").dispatch();
-            let body: Vec<u8> = response.body().unwrap().into_bytes().unwrap();
+            let _body: Vec<u8> = response.body().unwrap().into_bytes().unwrap();
         });
 
     }

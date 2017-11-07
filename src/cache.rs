@@ -15,13 +15,22 @@ use std::usize;
 use std::fmt;
 use std::sync::Arc;
 
-
-#[derive(Debug, Clone)]
+/// The structure that represents a file in memory.
+#[derive(Clone)]
 pub struct SizedFile {
     bytes: Vec<u8>,
     size: usize
 }
 
+/// The byte array shouldn't be visible in the debug log.
+impl fmt::Debug for SizedFile {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SizedFile {{ bytes: ..., size: {} }}", self.size )
+    }
+}
+
+/// The structure that is returned when a request to the cache is made.
+/// The CachedFile structure knows its path, so it can set the extension type when it is serialized to a request.
 #[derive(Debug, Clone)]
 pub struct CachedFile {
     path: PathBuf,
@@ -29,27 +38,6 @@ pub struct CachedFile {
 
 }
 
-//impl fmt::Display for CachedFile {
-//    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//        write!(f, "{{Path: {:?}, Size: {}}}", self.path, self.size)
-//
-//    }
-//}
-
-//impl CachedFile {
-//    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<CachedFile> {
-//        let file = File::open(path.as_ref())?;
-//        let mut reader = BufReader::new(file);
-//        let mut buffer: Vec<u8> = vec!();
-//        let size: usize = reader.read_to_end(&mut buffer)?;
-//
-//        Ok(CachedFile {
-//            path: path.as_ref().to_path_buf(),
-//            bytes: buffer,
-//            size
-//        })
-//    }
-//}
 
 impl SizedFile {
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<SizedFile> {
@@ -80,6 +68,9 @@ impl Responder<'static> for CachedFile {
             }
         }
 
+        // Convert the SizedFile into a raw pointer so its data can be used to set the streamed body
+        // without explicit ownership.
+        // This prevents copying the file, leading to a significant speedup.
         let file: *const SizedFile = Arc::into_raw(self.file);
         unsafe {
             response.set_streamed_body((*file).bytes.as_slice());
@@ -91,22 +82,29 @@ impl Responder<'static> for CachedFile {
 }
 
 /// Alternative implementation for sending the file via a reference.
-impl <'a>Responder<'a> for &'a CachedFile {
-    fn respond_to(self, _: &Request) -> result::Result<Response<'a>, Status> {
-        let mut response = Response::new();
-        if let Some(ext) = self.path.extension() {
-            if let Some(ct) = ContentType::from_extension(&ext.to_string_lossy()) {
-                response.set_header(ct);
-            }
-        }
+//impl <'a>Responder<'a> for &'a CachedFile {
+//    fn respond_to(self, _: &Request) -> result::Result<Response<'a>, Status> {
+//        let mut response = Response::new();
+//        if let Some(ext) = self.path.extension() {
+//            if let Some(ct) = ContentType::from_extension(&ext.to_string_lossy()) {
+//                response.set_header(ct);
+//            }
+//        }
+//
+//        response.set_streamed_body(self.file.bytes.as_slice());
+//        Ok(response)
+//    }
+//}
 
-        response.set_streamed_body(self.file.bytes.as_slice());
-        Ok(response)
-    }
-}
 
-
-
+/// The Cache holds a set number of files.
+/// The Cache acts as a proxy to the filesystem.
+/// When a request for a file is made, the Cache checks to see if it has a copy of the file.
+/// If it does have a copy, it returns the copy.
+/// If it doesn't have a copy, it reads the file from the FS and tries to cache it.
+/// If there is room in the Cache, the cache will store the file, otherwise it will increment a count indicating the number of access attempts for the file.
+/// If the number of access attempts for the file are higher than the least in demand file in the Cache, the cache will replace the low demand file with the high demand file.
+#[derive(Debug)]
 pub struct Cache {
     size_limit: usize, // Currently this is being used as the number of elements in the cache, but should be used as the number of bytes in the hashmap.
     file_map: HashMap<PathBuf, Arc<SizedFile>>, // Holds the files that the cache is caching
@@ -178,6 +176,8 @@ impl Cache {
     }
 
     /// Increments the access count.
+    // TODO Currently the access count will be incremented regardless of whether the file exists in the filesystem, consider breaking the increment step into another function.
+    ///
     /// Gets the file from the cache if it exists.
     pub fn get(&mut self, path: &PathBuf) -> Option<CachedFile> {
         let count: &mut usize = self.access_count_map.entry(path.to_path_buf()).or_insert(0usize);
@@ -201,8 +201,8 @@ impl Cache {
     /// or fails to find the file and returns None.
 
     pub fn get_or_cache(&mut self, pathbuf: PathBuf) -> Option<CachedFile> {
+        trace!("{:#?}", self);
         // First try to get the file in the cache that corresponds to the desired path.
-
         {
             if let Some(cache_file) = self.get(&pathbuf) {
                 info!("Cache hit for file: {:?}", pathbuf);
