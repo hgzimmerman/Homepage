@@ -13,7 +13,7 @@ use std::result;
 use std::io::Cursor;
 use std::usize;
 use std::fmt;
-
+use std::sync::Arc;
 
 
 #[derive(Debug, Clone)]
@@ -25,9 +25,8 @@ pub struct SizedFile {
 #[derive(Debug, Clone)]
 pub struct CachedFile {
     path: PathBuf,
-    file: SizedFile
-//    bytes: Vec<u8>,
-//    size: usize
+    file: Arc<SizedFile>
+
 }
 
 //impl fmt::Display for CachedFile {
@@ -81,7 +80,9 @@ impl Responder<'static> for CachedFile {
             }
         }
 
-        response.set_streamed_body(Cursor::new(self.file.bytes));
+        let file: &SizedFile = &*self.file;
+        let cursor = Cursor::new(file.clone().bytes); // TODO this is the clone that harms performance
+        response.set_streamed_body(cursor);
         Ok(response)
     }
 }
@@ -103,29 +104,9 @@ impl <'a>Responder<'a> for &'a CachedFile {
 
 
 
-//impl From<NamedFile> for CachedFile {
-//    fn from(named_file: NamedFile) -> Self {
-//        let path = named_file.path().to_path_buf();
-//        let file: File = named_file.take_file();
-//        let mut reader = BufReader::new(file);
-//        let mut buffer: Vec<u8> = vec!();
-//        let size: usize = reader.read_to_end(&mut buffer).unwrap();
-//
-//        CachedFile {
-//            path,
-//            bytes: buffer,
-//            size
-//        }
-//    }
-//}
-
-
-
-
 pub struct Cache {
     size_limit: usize, // Currently this is being used as the number of elements in the cache, but should be used as the number of bytes in the hashmap.
-    // TODO see if another datatype could reduce the need to store the PathBuf inside of the CachedFile as well. The CachedFile could be reconstiuted via references when it exits the hashmap.
-    file_map: HashMap<PathBuf, SizedFile>, // Holds the files that the cache is caching
+    file_map: HashMap<PathBuf, Arc<SizedFile>>, // Holds the files that the cache is caching
     access_count_map: HashMap<PathBuf, usize> // Every file that is accessed will have the number of times it is accessed logged in this map.
 }
 
@@ -159,7 +140,7 @@ impl Cache {
     /// If the provided file has more more access attempts than one of the files in the cache,
     /// but the cache is full, a file will have to be removed from the cache to make room
     /// for the new file.
-    pub fn store(&mut self, path: PathBuf, file: SizedFile) -> result::Result<(), String> {
+    pub fn store(&mut self, path: PathBuf, file: Arc<SizedFile>) -> result::Result<(), String> {
 
         // If there is room in the hashmap, just add the file
         if self.size() < self.size_limit {
@@ -232,13 +213,14 @@ impl Cache {
         // Check if the file read was a success.
         if let Ok(file) = sized_file {
             // If the file was read, convert it to a cached file and attempt to store it in the cache
+            let arc_file = Arc::new(file);
             let cached_file: CachedFile = CachedFile {
                 path: pathbuf.clone(),
-                file: file.clone() //TODO this clone is the primary performance limiter
+                file: arc_file.clone()
             };
 
             info!("Trying to add file {:?} to cache", pathbuf);
-            let _ = self.store(pathbuf, file); // possibly stores the cached file in the store.
+            let _ = self.store(pathbuf, arc_file); // possibly stores the cached file in the store.
             Some(cached_file)
         } else {
             // Indicate that the file was not found in either the filesystem or cache.
