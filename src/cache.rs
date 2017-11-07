@@ -80,9 +80,12 @@ impl Responder<'static> for CachedFile {
             }
         }
 
-        let file: &SizedFile = &*self.file;
-        let cursor = Cursor::new(file.clone().bytes); // TODO this is the clone that harms performance
-        response.set_streamed_body(cursor);
+        let file: *const SizedFile = Arc::into_raw(self.file);
+        unsafe {
+            response.set_streamed_body((*file).bytes.as_slice());
+            let _ = Arc::from_raw(file); // Prevent dangling pointer?
+        }
+
         Ok(response)
     }
 }
