@@ -81,20 +81,6 @@ impl Responder<'static> for CachedFile {
     }
 }
 
-/// Alternative implementation for sending the file via a reference.
-//impl <'a>Responder<'a> for &'a CachedFile {
-//    fn respond_to(self, _: &Request) -> result::Result<Response<'a>, Status> {
-//        let mut response = Response::new();
-//        if let Some(ext) = self.path.extension() {
-//            if let Some(ct) = ContentType::from_extension(&ext.to_string_lossy()) {
-//                response.set_header(ct);
-//            }
-//        }
-//
-//        response.set_streamed_body(self.file.bytes.as_slice());
-//        Ok(response)
-//    }
-//}
 
 
 /// The Cache holds a set number of files.
@@ -111,20 +97,6 @@ pub struct Cache {
     access_count_map: HashMap<PathBuf, usize> // Every file that is accessed will have the number of times it is accessed logged in this map.
 }
 
-//impl fmt::Display for Cache {
-//    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//        // TODO because the entries are unsorted, it is not guaranteed that the access counts will correspond to the paths.
-//        f.debug_list().entries(
-//            self.file_map.iter().zip(self.access_count_map.iter()).map(|x| {
-//                let size = (x.0).1.size;
-//                let count = (x.1).1;
-//                let path = &(x.0).1.path;
-//
-//                (path, size, count)
-//        })
-//        ).finish()
-//    }
-//}
 
 impl Cache {
 
