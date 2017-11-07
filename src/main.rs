@@ -52,7 +52,7 @@ fn init_rocket() -> Rocket {
 #[get("/<path..>", rank=4)]
 fn homepage_files(path: PathBuf, cache: State<Mutex<Cache>>) -> Option<CachedFile> {
     let pathbuf: PathBuf = Path::new("www/").join(path.clone()).to_owned();
-    cache.lock().unwrap().get_and_store(pathbuf)
+    cache.lock().unwrap().get_or_cache(pathbuf)
 }
 
 
