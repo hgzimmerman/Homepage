@@ -101,7 +101,7 @@ mod tests {
     #[bench]
     fn clone2meg(b: &mut Bencher) {
         use rand::{StdRng, Rng};
-        let mut megs2: [u8; 20000000] = [0u8; 2000000];
+        let mut megs2: [u8; 2000000] = [0u8; 2000000];
         StdRng::new().unwrap().fill_bytes(&mut megs2);
         b.iter( || {
             megs2.clone()

@@ -14,29 +14,52 @@ use std::io::Cursor;
 use std::usize;
 use std::fmt;
 
+
+
 #[derive(Debug, Clone)]
-pub struct CachedFile {
-    path: PathBuf,
+pub struct SizedFile {
     bytes: Vec<u8>,
     size: usize
 }
 
-impl fmt::Display for CachedFile {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{Path: {:?}, Size: {}}}", self.path, self.size)
-
-    }
+#[derive(Debug, Clone)]
+pub struct CachedFile {
+    path: PathBuf,
+    file: SizedFile
+//    bytes: Vec<u8>,
+//    size: usize
 }
 
-impl CachedFile {
-    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<CachedFile> {
+//impl fmt::Display for CachedFile {
+//    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//        write!(f, "{{Path: {:?}, Size: {}}}", self.path, self.size)
+//
+//    }
+//}
+
+//impl CachedFile {
+//    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<CachedFile> {
+//        let file = File::open(path.as_ref())?;
+//        let mut reader = BufReader::new(file);
+//        let mut buffer: Vec<u8> = vec!();
+//        let size: usize = reader.read_to_end(&mut buffer)?;
+//
+//        Ok(CachedFile {
+//            path: path.as_ref().to_path_buf(),
+//            bytes: buffer,
+//            size
+//        })
+//    }
+//}
+
+impl SizedFile {
+    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<SizedFile> {
         let file = File::open(path.as_ref())?;
         let mut reader = BufReader::new(file);
         let mut buffer: Vec<u8> = vec!();
         let size: usize = reader.read_to_end(&mut buffer)?;
 
-        Ok(CachedFile {
-            path: path.as_ref().to_path_buf(),
+        Ok(SizedFile {
             bytes: buffer,
             size
         })
@@ -58,7 +81,7 @@ impl Responder<'static> for CachedFile {
             }
         }
 
-        response.set_streamed_body(Cursor::new(self.bytes));
+        response.set_streamed_body(Cursor::new(self.file.bytes));
         Ok(response)
     }
 }
@@ -73,52 +96,53 @@ impl <'a>Responder<'a> for &'a CachedFile {
             }
         }
 
-        response.set_streamed_body(self.bytes.as_slice());
+        response.set_streamed_body(self.file.bytes.as_slice());
         Ok(response)
     }
 }
 
 
 
-impl From<NamedFile> for CachedFile {
-    fn from(named_file: NamedFile) -> Self {
-        let path = named_file.path().to_path_buf();
-        let file: File = named_file.take_file();
-        let mut reader = BufReader::new(file);
-        let mut buffer: Vec<u8> = vec!();
-        let size: usize = reader.read_to_end(&mut buffer).unwrap();
+//impl From<NamedFile> for CachedFile {
+//    fn from(named_file: NamedFile) -> Self {
+//        let path = named_file.path().to_path_buf();
+//        let file: File = named_file.take_file();
+//        let mut reader = BufReader::new(file);
+//        let mut buffer: Vec<u8> = vec!();
+//        let size: usize = reader.read_to_end(&mut buffer).unwrap();
+//
+//        CachedFile {
+//            path,
+//            bytes: buffer,
+//            size
+//        }
+//    }
+//}
 
-        CachedFile {
-            path,
-            bytes: buffer,
-            size
-        }
-    }
-}
 
 
 
 pub struct Cache {
     size_limit: usize, // Currently this is being used as the number of elements in the cache, but should be used as the number of bytes in the hashmap.
     // TODO see if another datatype could reduce the need to store the PathBuf inside of the CachedFile as well. The CachedFile could be reconstiuted via references when it exits the hashmap.
-    file_map: HashMap<PathBuf, CachedFile>, // Holds the files that the cache is caching
+    file_map: HashMap<PathBuf, SizedFile>, // Holds the files that the cache is caching
     access_count_map: HashMap<PathBuf, usize> // Every file that is accessed will have the number of times it is accessed logged in this map.
 }
 
-impl fmt::Display for Cache {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO because the entries are unsorted, it is not guaranteed that the access counts will correspond to the paths.
-        f.debug_list().entries(
-            self.file_map.iter().zip(self.access_count_map.iter()).map(|x| {
-                let size = (x.0).1.size;
-                let count = (x.1).1;
-                let path = &(x.0).1.path;
-
-                (path, size, count)
-        })
-        ).finish()
-    }
-}
+//impl fmt::Display for Cache {
+//    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//        // TODO because the entries are unsorted, it is not guaranteed that the access counts will correspond to the paths.
+//        f.debug_list().entries(
+//            self.file_map.iter().zip(self.access_count_map.iter()).map(|x| {
+//                let size = (x.0).1.size;
+//                let count = (x.1).1;
+//                let path = &(x.0).1.path;
+//
+//                (path, size, count)
+//        })
+//        ).finish()
+//    }
+//}
 
 impl Cache {
 
@@ -135,7 +159,7 @@ impl Cache {
     /// If the provided file has more more access attempts than one of the files in the cache,
     /// but the cache is full, a file will have to be removed from the cache to make room
     /// for the new file.
-    pub fn store(&mut self, path: PathBuf, file: CachedFile) -> result::Result<(), String> {
+    pub fn store(&mut self, path: PathBuf, file: SizedFile) -> result::Result<(), String> {
 
         // If there is room in the hashmap, just add the file
         if self.size() < self.size_limit {
@@ -171,10 +195,22 @@ impl Cache {
 
     /// Increments the access count.
     /// Gets the file from the cache if it exists.
-    pub fn get(&mut self, path: &PathBuf) -> Option<&CachedFile> {
+    pub fn get(&mut self, path: &PathBuf) -> Option<CachedFile> {
         let count: &mut usize = self.access_count_map.entry(path.to_path_buf()).or_insert(0usize);
         *count += 1; // Increment the access count
-        self.file_map.get(path)
+        match self.file_map.get(path) {
+            Some(sized_file) => {
+                Some(
+                    CachedFile {
+                        path: path.clone(),
+                        file: sized_file.clone()
+                    }
+                )
+            }
+            None => None
+
+        }
+
     }
 
     /// Either gets the file from the cache, gets it from the filesystem and tries to cache it,
@@ -182,20 +218,27 @@ impl Cache {
 
     pub fn get_or_cache(&mut self, pathbuf: PathBuf) -> Option<CachedFile> {
         // First try to get the file in the cache that corresponds to the desired path.
-        if let Some(cache_file) = self.get(&pathbuf) {
-            info!("Cache hit for file: {:?}", pathbuf);
-            return Some( cache_file.clone())
-        };
+
+        {
+            if let Some(cache_file) = self.get(&pathbuf) {
+                info!("Cache hit for file: {:?}", pathbuf);
+                return Some(cache_file)
+            }
+        }
 
         info!("Cache missed for file: {:?}", pathbuf);
         // Instead the file needs to read from the filesystem.
-        let named_file: Result<NamedFile> = NamedFile::open(pathbuf.as_path());
+        let sized_file: Result<SizedFile> = SizedFile::open(pathbuf.as_path());
         // Check if the file read was a success.
-        if let Ok(file) = named_file {
+        if let Ok(file) = sized_file {
             // If the file was read, convert it to a cached file and attempt to store it in the cache
-            let cached_file: CachedFile = CachedFile::from(file);
+            let cached_file: CachedFile = CachedFile {
+                path: pathbuf.clone(),
+                file: file.clone() //TODO this clone is the primary performance limiter
+            };
+
             info!("Trying to add file {:?} to cache", pathbuf);
-            let _ = self.store(pathbuf, cached_file.clone()); // possibly stores the cached file in the store.
+            let _ = self.store(pathbuf, file); // possibly stores the cached file in the store.
             Some(cached_file)
         } else {
             // Indicate that the file was not found in either the filesystem or cache.
