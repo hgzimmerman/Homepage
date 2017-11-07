@@ -9,21 +9,15 @@ extern crate simplelog;
 extern crate test;
 extern crate rand;
 
-
-use rocket::response::NamedFile;
 use rocket::Rocket;
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 use rocket::request::State;
 use std::sync::Mutex;
 use std::fs::File;
-use std::io::Result;
 
 use simplelog::{Config, TermLogger, WriteLogger, CombinedLogger, LogLevelFilter};
 
 
-mod my_named_file;
-use my_named_file::MyNamedFile;
 
 mod cache;
 use cache::*;
@@ -70,6 +64,7 @@ mod tests {
     use rocket::local::Client;
     use rocket::http::Status;
     use test::Bencher;
+    use rocket::response::NamedFile;
 
     #[bench]
     fn cache_access(b: &mut Bencher) {
@@ -102,11 +97,11 @@ mod tests {
 
     }
 
-    // This bench was to confirm that all performance was lost in cloning the datastructure storing the file.
+    // This bench was to confirm that all performance was lost in cloning the data structure storing the file.
     #[bench]
     fn clone2meg(b: &mut Bencher) {
         use rand::{StdRng, Rng};
-        let mut megs2 = [0u8; 2000000];
+        let mut megs2: [u8; 20000000] = [0u8; 2000000];
         StdRng::new().unwrap().fill_bytes(&mut megs2);
         b.iter( || {
             megs2.clone()

@@ -5,7 +5,6 @@ use std::io::BufReader;
 use rocket::request::Request;
 use rocket::response::{Response, Responder};
 use rocket::http::{Status, ContentType};
-use std::ops::Deref;
 use std::io::Read;
 use std::io::Result;
 use std::io;
@@ -111,7 +110,7 @@ impl fmt::Display for Cache {
                 let count = (x.1).1;
                 let path = &(x.0).1.path;
 
-                ((path, size), (x.1).1)
+                ((path, size), count)
         })
 //                .zip(self.access_count_map.iter())
         ).finish()
@@ -178,9 +177,6 @@ impl Cache {
     }
 
     pub fn get_and_store(&mut self, pathbuf: PathBuf) -> Option<CachedFile> {
-//        info!("Cache: {}", self);
-
-        let file: Option<CachedFile>;
         // First try to get the file in the cache that corresponds to the desired path.
         if let Some(cache_file) = self.get(&pathbuf) {
             info!("Cache hit for file: {:?}", pathbuf);
@@ -195,7 +191,7 @@ impl Cache {
             // If the file was read, convert it to a cached file and attempt to store it in the cache
             let cached_file: CachedFile = CachedFile::from(file);
             info!("Trying to add file {:?} to cache", pathbuf);
-            self.store(pathbuf, cached_file.clone()); // possibly stores the cached file in the store.
+            let _ = self.store(pathbuf, cached_file.clone()); // possibly stores the cached file in the store.
             Some(cached_file)
         } else {
             // Indicate that the file was not found in either the filesystem or cache.
