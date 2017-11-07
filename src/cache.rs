@@ -100,6 +100,7 @@ impl From<NamedFile> for CachedFile {
 
 pub struct Cache {
     size_limit: usize, // Currently this is being used as the number of elements in the cache, but should be used as the number of bytes in the hashmap.
+    // TODO see if another datatype could reduce the need to store the PathBuf inside of the CachedFile as well. The CachedFile could be reconstiuted via references when it exits the hashmap.
     file_map: HashMap<PathBuf, CachedFile>, // Holds the files that the cache is caching
     access_count_map: HashMap<PathBuf, usize> // Every file that is accessed will have the number of times it is accessed logged in this map.
 }
