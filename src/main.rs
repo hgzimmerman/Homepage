@@ -9,6 +9,9 @@ extern crate simplelog;
 extern crate test;
 extern crate rand;
 
+extern crate rocket_file_cache;
+use rocket_file_cache::{Cache, CachedFile};
+
 use rocket::Rocket;
 use std::path::{Path, PathBuf};
 use rocket::request::State;
@@ -17,10 +20,6 @@ use std::fs::File;
 
 use simplelog::{Config, TermLogger, WriteLogger, CombinedLogger, LogLevelFilter};
 
-
-
-mod cache;
-use cache::*;
 
 #[get("/")]
 fn index() -> &'static str {
