@@ -12,6 +12,7 @@ extern crate rand;
 extern crate rocket_file_cache;
 use rocket_file_cache::{Cache, CachedFile};
 
+use rocket::response::Redirect;
 use rocket::Rocket;
 use std::path::{Path, PathBuf};
 use rocket::request::State;
@@ -22,8 +23,8 @@ use simplelog::{Config, TermLogger, WriteLogger, CombinedLogger, LogLevelFilter}
 
 
 #[get("/")]
-fn index() -> &'static str {
-    "Hello, world!"
+fn index() -> Redirect {
+    Redirect::to("/_.html")
 }
 
 fn main() {
@@ -45,7 +46,7 @@ fn init_rocket() -> Rocket {
 
     rocket::ignite()
         .manage(cache)
-        .mount("/", routes![homepage_files])
+        .mount("/", routes![homepage_files, index])
 }
 
 #[get("/<path..>", rank=4)]
