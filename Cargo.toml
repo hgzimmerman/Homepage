@@ -1,8 +1,12 @@
 [package]
-name = "Homepage"
+name = "homepage"
 version = "0.1.0"
 authors = ["Henry Zimmerman <zimhen7@gmail.com>"]
 
 [dependencies]
 rocket = "0.3.3"
 rocket_codegen = "0.3.3"
+log = "0.3.8"
+simplelog = "^0.4.2"
+rand = "0.3"
+rocket-file-cache = "0.1.0"
