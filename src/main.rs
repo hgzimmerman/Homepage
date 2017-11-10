@@ -10,7 +10,10 @@ extern crate test;
 extern crate rand;
 
 extern crate rocket_file_cache;
-use rocket_file_cache::{Cache, CachedFile};
+//use rocket_file_cache::{Cache, CachedFile, CacheBuilder};
+use rocket_file_cache::cached_file::CachedFile;
+use rocket_file_cache::cache::Cache;
+use rocket_file_cache::cache_builder::CacheBuilder;
 
 use rocket::response::Redirect;
 use rocket::Rocket;
@@ -42,7 +45,11 @@ fn main() {
 }
 
 fn init_rocket() -> Rocket {
-    let cache: Mutex<Cache> = Mutex::new(Cache::new(10));
+    let cache: Mutex<Cache> = Mutex::new(
+        CacheBuilder::new()
+            .size_limit_bytes(1024 * 1024 * 50) // 50 MB limit
+            .build().unwrap()
+    );
 
     rocket::ignite()
         .manage(cache)
