@@ -47,8 +47,9 @@ fn main() {
 fn init_rocket() -> Rocket {
     let cache: Mutex<Cache> = Mutex::new(
         CacheBuilder::new()
-            .size_limit_bytes(1024 * 1024 * 50) // 50 MB limit
-            .build().unwrap()
+            .size_limit_bytes(1024 * 1024 * 20) // 20 MB limit
+            .build()
+            .unwrap()
     );
 
     rocket::ignite()
